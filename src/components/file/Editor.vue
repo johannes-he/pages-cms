@@ -120,6 +120,9 @@
             <Datagrid v-model="model"/>
           </div>
         </template>
+        <template v-else-if="mode === 'markdown'">
+          <TipTap v-model="model"/>
+        </template>
         <template v-else>
           <textarea rows="20" v-model="model" class="textarea w-full"></textarea>
         </template>
@@ -157,6 +160,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Base64 } from 'js-base64';
 import { debounce } from 'lodash';
 import YAML from 'yaml';
+import TOML from '@ltd/j-toml';
 import notifications from '@/services/notifications';
 import github from '@/services/github';
 import config from '@/services/config';
@@ -170,6 +174,7 @@ import Field from '@/components/file/Field.vue';
 import Delete from '@/components/file/Delete.vue';
 import History from '@/components/file/History.vue';
 import Rename from '@/components/file/Rename.vue';
+import TipTap from '@/components/file/TipTap.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -464,7 +469,7 @@ const save = async () => {
         content = JSON.stringify(content, null, 2);
         break;
       case 'toml':
-        content = TOML.stringify(content, null, 2);
+        content = TOML.stringify(content, { newline: '\n' }).trim();
         break;
     }
   }
