@@ -9,7 +9,7 @@
       <div class="error h-screen">
         <div class="text-center max-w-md">
           <h1 class="font-semibold tracking-tight text-2xl mb-2">Something's not right.</h1>
-          <p class="text-neutral-400 dark:text-neutral-500 mb-6">Your configuration is probably wrong: this collection is set to the <code class="text-sm bg-neutral-100 dark:bg-neutral-850 rounded-lg p-1">{{ schema.path }}</code> folder in this repository.</p>
+          <p class="text-neutral-400 dark:text-neutral-500 mb-6">Either your settings for the <code class="text-sm bg-neutral-100 dark:bg-neutral-850 rounded-lg p-1">{{ schema.name }}</code> collection are wrong or you may need to create the <code class="text-sm bg-neutral-100 dark:bg-neutral-850 rounded-lg p-1">{{ schema.path }}</code> folder in this repository.</p>
           <div class="flex gap-x-2 justify-center">
             <router-link class="btn-primary" :to="{name: 'settings'}">Review settings</router-link>
           </div>
@@ -21,7 +21,7 @@
       <div class="max-w-screen-xl	mx-auto p-4 lg:p-8">
         <!-- Header: label, add an entry and more (i.e. see folder on GitHub, add a folder) -->
         <header class="flex gap-x-2 mb-8 items-center">
-          <h1 class="font-semibold tracking-tight text-2xl lg:text-4xl mr-auto">{{ schema.label }}</h1>
+          <h1 class="font-semibold tracking-tight text-2xl lg:text-4xl mr-auto">{{ schema.label || schema.name }}</h1>
           <Dropdown :dropdownClass="'!max-w-none w-52 !z-[21]'" v-if="schema.subfolders !== false">
             <template #trigger>
               <button class="btn-icon group-[.dropdown-active]:bg-neutral-100 dark:group-[.dropdown-active]:bg-neutral-850">
@@ -36,7 +36,7 @@
                     <Icon name="ExternalLink" class="h-4 w-4 stroke-2 shrink-0 ml-auto text-neutral-400 dark:text-neutral-500"/>
                   </a>
                 </li>
-                <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-2"/></li>
+                <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-1"/></li>
                 <li><button class="link w-full" @click="openAddFolderModal()">Add a folder</button></li>
               </ul>
             </template>
@@ -66,7 +66,7 @@
                     <Icon v-if="view.sort === sortField" name="Check" class="h-4 w-4 stroke-2 shrink-0 ml-auto"/>
                   </button>
                 </li>
-                <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-2"/></li>
+                <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-1"/></li>
                 <li>
                   <button class="link w-full" @click="view.order = 'asc'">
                     Ascendant
@@ -94,7 +94,7 @@
             <tbody>
               <!-- Go to parent -->
               <tr v-if="parentFolder" class="h-[47px]">
-                <td :colspan="view.config.fields.length + 1" class="folder">
+                <td colspan="100%" class="folder">
                   <router-link :to="parentFolder" class="flex gap-x-2 items-center font-medium">
                     <Icon name="CornerLeftUp" class="h-4 w-4 stroke-2 shrink-0"/>
                     ..
@@ -102,48 +102,44 @@
                 </td>
               </tr>
               <!-- Subfolders -->
-              <tr v-for="item in viewContents.folders" :key="item.name" v-if="schema.subfolders !== false">
-                <td :colspan="view.config.fields.length" class="folder">
+              <tr v-for="item in viewContents.folders" :key="item.name" v-if="schema.subfolders !== false" class="h-[47px]">
+                <td colspan="100%" class="folder">
                   <router-link :to="{ name: $route.name, query: { ...$route.query, folder: item.path } }" class="flex gap-x-2 items-center font-medium">
                     <Icon name="Folder" class="h-4 w-4 stroke-2 shrink-0"/>
                     <div class="truncate">{{ item.name }}</div>
                   </router-link>
-                </td>
-                <td class="actions text-right">
-                  <div class="inline-flex">
-                    <Dropdown :dropdownClass="'!max-w-none w-52'">
-                      <template #trigger>
-                        <button class="btn-icon-sm group-[.dropdown-active]:bg-neutral-100 dark:group-[.dropdown-active]:bg-neutral-850">
-                          <Icon name="MoreVertical" class="h-4 w-4 stroke-2 shrink-0"/>
-                        </button>
-                      </template>
-                      <template #content>
-                        <ul>
-                          <li>
-                            <a class="link w-full" :href="`https://github.com/${props.owner}/${props.repo}/blob/${props.branch}/${item.path}`" target="_blank">
-                              <div class="truncate">See folder on GitHub</div>
-                              <Icon name="ExternalLink" class="h-4 w-4 stroke-2 shrink-0 ml-auto text-neutral-400 dark:text-neutral-500"/>
-                            </a>
-                          </li>
-                        </ul>
-                      </template>
-                    </Dropdown>
-                  </div>
                 </td>
               </tr>
               <!-- Entry -->
               <tr v-for="item in viewContents.files" :key="item.filename">
                 <td v-for="field in view.config.fields" :class="[ field == view.config.primary ? 'primary-field' : '', `field-type-${fieldsSchemas[field]?.type}` ]">
                   <template v-if="field == view.config.primary">
-                    <router-link :to="{ name: 'edit', params: { name: name, path: item.path } }" v-html="formatField(field, item.fields?.[field])"></router-link>
+                    <router-link :to="{ name: 'edit', params: { name: name, path: item.path } }">
+                      <template v-if="fieldRegistry[fieldsSchemas[field]?.type]?.ViewComponent">
+                        <component
+                          :is="fieldRegistry[fieldsSchemas[field]?.type]?.ViewComponent"
+                          :field="fieldsSchemas[field]"
+                          :value="item.fields?.[field]"
+                        />
+                      </template>
+                      <template v-else>
+                        {{ item.fields?.[field] }}
+                      </template>
+                    </router-link>
                   </template>
-                  <template v-else-if="item.fields?.[field]">
-                    <template v-if="fieldsSchemas[field]?.type === 'image'">
-                      <Image :path="formatField(field, item.fields?.[field])"/>
-                    </template>
-                    <template v-else>
-                      <div v-html="formatField(field, item.fields?.[field])"></div>
-                    </template>
+                  <template v-else>
+                    <div>
+                      <template v-if="fieldRegistry[fieldsSchemas[field]?.type]?.ViewComponent">
+                        <component
+                          :is="fieldRegistry[fieldsSchemas[field]?.type]?.ViewComponent"
+                          :field="fieldsSchemas[field]"
+                          :value="item.fields?.[field]"
+                        />
+                      </template>
+                      <template v-else>
+                        {{ item.fields?.[field] }}
+                      </template>
+                    </div>
                   </template>
                 </td>
                 <td class="actions text-right">
@@ -163,7 +159,7 @@
                               <Icon name="ExternalLink" class="h-4 w-4 stroke-2 shrink-0 ml-auto text-neutral-400 dark:text-neutral-500"/>
                             </a>
                           </li>
-                          <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-2"/></li>
+                          <li><hr class="border-t border-neutral-150 dark:border-neutral-750 my-1"/></li>
                           <li><button class="link w-full" @click="openRenameModal(item)">Rename</button></li>
                           <li><router-link :to="{ name: 'new', params: { path: item.path } }" class="link w-full">Make a copy</router-link></li>
                           <li><button class="link-danger w-full" @click="openDeleteModal(item)">Delete</button></li>
@@ -180,7 +176,7 @@
         <div v-if="contents.files.length == 0" class="text-center rounded-xl bg-neutral-100 dark:bg-neutral-850 p-6">
           <div class="max-w-md mx-auto">
             <h2 class="font-semibold tracking-tight">No entries</h2>
-            <p class="text-neutral-400">There are no entries yet for the "{{ schema.label }}" collection here.</p>
+            <p class="text-neutral-400 dark:text-neutral-500">There are no entries yet for the "{{ schema.label || schema.name }}" collection here.</p>
           </div>
           <div class="flex gap-x-2 justify-center mt-4">
             <router-link :to="{ name: 'new', query: { folder: folder } }" class="btn-primary-sm">Add an entry</router-link>
@@ -231,21 +227,22 @@
 import { ref, reactive, onMounted, watch, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import lunr from 'lunr';
-import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-dayjs.extend(customParseFormat);
+import moment from 'moment';
+import fieldRegistry from '@/fields/fieldRegistry';
+import useSchema from '@/composables/useSchema';
 import github from '@/services/github';
-import githubImg from '@/services/githubImg';
-import frontmatter from '@/services/frontmatter';
+import serialization from '@/services/serialization';
 import notifications from '@/services/notifications';
 import Dropdown from '@/components/utils/Dropdown.vue';
 import Icon from '@/components/utils/Icon.vue';
 import AddFolder from '@/components/file/AddFolder.vue';
 import Rename from '@/components/file/Rename.vue';
 import Delete from '@/components/file/Delete.vue';
-import Image from '@/components/file/Image.vue';
+
+const serializedTypes = ['yaml-frontmatter', 'json-frontmatter', 'toml-frontmatter', 'yaml', 'json', 'toml'];
 
 const route = useRoute();
+const { getDateFromFilename } = useSchema();
 
 const props = defineProps({
   owner: String,
@@ -271,6 +268,14 @@ const contents = computed(() => {
   };
 });
 const schema = computed(() => props.config.content.find(item => item.name === props.name));
+const schemaFields = computed(() => {
+  let fieldsArray = schema.value.fields ? JSON.parse(JSON.stringify(schema.value.fields)) : [{ name: 'filename', label: 'Filename', type: 'string' }];
+  // TODO: this is weak as the first entry may NOT have a date in the filename
+  if (collection.value?.[0]?.fields?.date && !fieldsArray.find(field => field.name === 'date')) {
+    fieldsArray.push({ name: 'date', label: 'Date', type: 'date' });
+  }
+  return fieldsArray;
+});
 const format = computed(() => schema.value.format || 'yaml-frontmatter');
 const extension = computed(() => {
   if (schema.value.filename) {
@@ -280,10 +285,10 @@ const extension = computed(() => {
     return 'md';
   }
 });
-const fields = computed(() => schema.value.fields.map(field => field.name));
+const fields = computed(() => schemaFields.value.map(field => field.name));
 const fieldsSchemas = computed(() => {
   const schemas = {};
-  schema.value.fields.forEach(field => {
+  schemaFields.value.forEach(field => {
     schemas[field.name] = field;
   });
   return schemas;
@@ -316,6 +321,7 @@ const view = reactive({
   search: '',
 });
 // Content actually displayed, taking into account search & sort
+// TODO: add validation of fields in config (sort, fields, etc.), both here and in the settings editor
 const viewContents = computed(() => {
   let viewFiles = [...contents.value.files];
   
@@ -349,25 +355,19 @@ const viewContents = computed(() => {
   
   // Apply sorting
   viewFiles = viewFiles.slice().sort((a, b) => {
-    const sortKey = view.sort;
-    // Default value when sortKey is not present or fields is undefined.
-    const defaultValue = '';
-    // Check if fields is defined and has the sortKey
-    let valA = (a.fields && a.fields[sortKey] !== undefined) ? a.fields[sortKey] : defaultValue;
-    let valB = (b.fields && b.fields[sortKey] !== undefined) ? b.fields[sortKey] : defaultValue;
-    // Convert booleans to integers to help with comparison with null/undefined
-    if (typeof valA === 'boolean') valA = valA ? 2 : 1;
-    if (typeof valB === 'boolean') valB = valB ? 2 : 1;
-    // Convert to lowercase if the value is a string
-    if (typeof valA === 'string') valA = valA.toLowerCase();
-    if (typeof valB === 'string') valB = valB.toLowerCase();
     let comparison = 0;
-    if (valA < valB) {
-      comparison = -1;
-    } else if (valA > valB) {
-      comparison = 1;
+    const sortKey = view.sort;
+    const fieldSchema = fieldsSchemas.value[sortKey];
+    let valA = a.fields?.[sortKey];
+    let valB = b.fields?.[sortKey];
+    const sortFunction = fieldRegistry[fieldSchema?.type]?.sortFunction;
+    if (sortFunction !== undefined) {
+      comparison = sortFunction(valA, valB, fieldSchema);
+    } else {
+      valA = valA != null ? String(valA) : '';
+      valB = valB != null ? String(valB) : '';
+      comparison = valA.localeCompare(valB, undefined, { sensitivity: 'base', ignorePunctuation: true });
     }
-
     return view.order === 'desc' ? -comparison : comparison;
   });
 
@@ -376,38 +376,6 @@ const viewContents = computed(() => {
     folders: [...contents.value.folders],
   };
 });
-
-const formatField = (field, value) => {
-  // TODO: Refactor this into the field components or useSchema, and add support for nested fields
-  if (value == null) {
-    return '';
-  }
-  const fieldSchema = fieldsSchemas.value[field];
-  if (!fieldSchema) return value;
-  switch (fieldSchema.type) {
-    case 'image':
-      const prefixInput = fieldSchema.options?.input ?? props.config.media?.input ?? null;
-      const prefixOutput = fieldSchema.options?.output ?? props.config.media?.output ?? null;
-      const imgPath = Array.isArray(value) ? value[0] : value;
-      return githubImg.swapPrefix(imgPath, prefixOutput, prefixInput);
-    case 'date':
-      const defaultInputFormat = fieldSchema.options?.time ? 'YYYY-MM-DDTHH:mm' : 'YYYY-MM-DD';
-      const outputFormat = fieldSchema.options?.time ? 'MMM D, YYYY - HH:mm' : 'MMM D, YYYY';
-      const inputFormat = fieldSchema.options?.format || defaultInputFormat;
-      const dateObject = dayjs(value, inputFormat);
-      if (!dateObject.isValid()) {
-        // TODO: convert to standard date and override in collection directly for sorting purpose
-        console.warn(`Date for field '${field}' is saved in the wrong format or invalid:`, value);
-        return '';
-      }
-      return dateObject.format(outputFormat);
-    case 'boolean':
-      const chipClass = value ? 'chip-primary' : 'chip-secondary';
-      return `<div class="!inline ${chipClass}">${value ? 'True' : 'False'}</div>`;
-    default:
-      return value;
-  }
-};
 
 function openRenameModal(item) {
   renamePath.value = item.path;
@@ -439,13 +407,13 @@ const handleFolderAdded = () => {
   setCollection();
 };
 
+// TODO: support configurable fields and offer full file indexing if no valid fields
 let searchIndex;
-
 const setSearch = () => {
   // TODO: add configurable fields for indexing
   searchIndex = lunr(function () {
     this.ref('filename');
-    schema.value.fields.forEach(field => {
+    schemaFields.value.forEach(field => {
       this.field(field.name);
     });
     collection.value.forEach(doc => {
@@ -460,9 +428,9 @@ const setSearch = () => {
 };
 
 const setView = () => {
-  view.config.fields = (schema.value.view && schema.value.view.fields) || [ fields.value[0] ];
   view.config.primary = (schema.value.view && schema.value.view.primary) || (fields.value.includes('title') ? 'title' : fields.value[0]);
-  view.config.sort = (schema.value.view && schema.value.view.sort) || (collection.value[0] && collection.value[0].fields?.date ? ['date', view.config.primary] : [view.config.primary]);
+  view.config.fields = (schema.value.view && schema.value.view.fields) || (collection.value[0]?.fields?.date ? [ view.config.primary, 'date' ] : [view.config.primary]);
+  view.config.sort = (schema.value.view && schema.value.view.sort) || (collection.value[0]?.fields?.date ? ['date', view.config.primary] : [view.config.primary]);
   view.sort = (schema.value.view && schema.value.view.default && schema.value.view.default.sort) || (view.config.sort && view.config.sort.length) ? view.config.sort[0] : null;
   view.order = (schema.value.view && schema.value.view.default && schema.value.view.default.order) || 'desc';
   view.search = (schema.value.view && schema.value.view.default && schema.value.view.default.search) || '';
@@ -480,21 +448,39 @@ const setCollection = async () => {
   }
 
   let errorCount = 0;
-  collection.value = files.map(file => {
+  const excludedFiles = schema.value.exclude || [];
+  collection.value = files.filter(file => {
+    return !excludedFiles.includes(file.name);
+  }).map(file => {
     if (file.type === 'blob' && (extension.value === '' || file.name.endsWith(`.${extension.value}`))) {
-      let parsed;
-      try {
-        parsed = frontmatter.parse(file.object.text, { format: format.value, delimiters: schema.value.delimiters });
-      } catch (error) {
-        console.warn(`Error parsing frontmatter for file "${file.path}":`, error);
-        errorCount++;
+      let contentObject = {};
+      if (serializedTypes.includes(format.value) && schema.value?.fields) {
+        try {
+          contentObject = serialization.parse(file.object.text, { format: format.value, delimiters: schema.value.delimiters });
+        } catch (error) {
+          console.warn(`Error parsing frontmatter for file "${file.path}":`, error);
+          errorCount++;
+        }
       }
+      if (!schema.value.fields || schema.value.fields.length === 0) {
+        // If no fields are defined in the schema, we fake a filename field
+        contentObject.filename = file.name;
+      }
+      if (!contentObject.date && (!schema.value.filename || schema.value.filename.startsWith('{year}-{month}-{day}'))) {
+        // If we couldn't get a date from the content and filenames have a date, we extract it
+        const filenameDate = getDateFromFilename(file.name);
+        if (filenameDate) {
+          const dateFormat = fieldsSchemas.value['date']?.options?.format ?? 'YYYY-MM-DD';
+          contentObject.date = moment(filenameDate.string, 'YYYY-MM-DD').format(dateFormat);
+        }
+      }
+
       return {
         sha: file.object.oid,
         filename: file.name,
         path: file.path,
         content: file.object.text,
-        fields: parsed,
+        fields: contentObject,
         type: file.type,
       };
     } else if (file.type === 'tree') {

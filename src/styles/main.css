@@ -251,6 +251,20 @@ button.btn-icon-danger-sm {
   @apply bg-neutral-100 dark:bg-neutral-850;
 }
 
+/* Tabs */
+
+.tabs {
+  @apply flex gap-x-8 font-medium text-neutral-400 dark:text-neutral-500;
+}
+
+.tabs > button {
+  @apply hover:text-neutral-950 dark:hover:text-white border-b-2 border-transparent transition-colors py-1;
+}
+
+.tabs > button.active {
+  @apply text-neutral-950 dark:text-white border-b-neutral-950 dark:border-b-white;
+}
+
 /* Forms */
 
 input[type='text'],
@@ -347,11 +361,15 @@ fieldset .field:last-child {
 }
 
 .field-list-item {
-  @apply bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-750 p-1.5 flex gap-y-1 gap-x-2 items-center rounded-xl mb-2;
+  @apply bg-white dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-750 px-3 py-1.5 flex gap-y-1 gap-x-3 items-center rounded-xl mb-2;
 }
 
 .field-list-item:last-child {
   @apply mb-0;
+}
+
+.field-type-object .field-list-item {
+  @apply px-3 py-4;
 }
 
 /* Spinner */
@@ -443,13 +461,22 @@ fieldset .field:last-child {
   @apply -translate-x-1/2 left-1/2;
 }
 
+.tooltip-right {
+  @apply tooltip right-2 translate-x-full group-hover:right-0;
+}
+
 .tooltip-bottom {
   @apply tooltip top-full group-hover:mt-0 mt-1;
 }
 
 .tooltip-top,
-.tooltip-top-right {
+.tooltip-top-right,
+.tooltip-top-left {
   @apply tooltip bottom-full group-hover:mb-0 mb-1;
+}
+
+.tooltip-top-left {
+  @apply left-0;
 }
 
 .tooltip-top-right {
@@ -538,10 +565,9 @@ fieldset .field:last-child {
 
 /* Repo picker modal */
 
-.modal-repo-picker .modal-box {
+.modal-repo-menu .modal-box {
   @apply !w-[500px];
-}
-
+}s
 
 /* Table */
 
@@ -571,8 +597,7 @@ fieldset .field:last-child {
 }
 
 .table th.primary-field,
-.table td.primary-field,
-.table td.folder {
+.table td.primary-field {
   @apply max-w-[1px] w-full truncate;
 }
 
@@ -590,7 +615,7 @@ fieldset .field:last-child {
 }
 
 .table td.primary-field {
-  @apply font-medium;
+  @apply font-medium max-lg:!pl-0;
 }
 
 .table td.field-type-image > div {

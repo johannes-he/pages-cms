@@ -1,6 +1,6 @@
 <template>
   <template v-if="route.name == 'content'">
-    <template v-if="schema && schema.type == 'collection'">
+    <template v-if="schema?.type == 'collection'">
       <Collection
         :owner="owner"
         :repo="repo"
@@ -9,7 +9,7 @@
         :config="config"
       />
     </template>
-    <template v-else-if="schema && schema.type == 'file'">
+    <template v-else-if="schema?.type == 'file'">
       <Editor
         :owner="owner"
         :repo="repo"
@@ -18,27 +18,36 @@
         :config="config"
         :path="schema.path"
         :format="schema.format"
-        :title="schema.label"
+        :title="schema.label || schema.name"
       />
+    </template>
+    <template v-else>
+      <div class="error h-screen">
+        <div class="text-center max-w-md">
+          <h1 class="font-semibold tracking-tight text-2xl mb-2">Something's not right.</h1>
+          <p class="text-neutral-400 dark:text-neutral-500 mb-6">This route doesn't match anything valid in your configuration. Your settings may be wrong.</p>
+          <div class="flex gap-x-2 justify-center">
+            <router-link class="btn-primary" :to="{name: 'settings'}">Review settings</router-link>
+          </div>
+        </div>
+      </div>
     </template>
   </template>
   <template v-else>
     <router-view v-slot="{ Component }">
-      <component
-      :is="Component" :config="config"/>
+      <component :is="Component" :config="config"/>
     </router-view>
   </template>
 </template>
 
 <script setup>
-import { onMounted, watch, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 import useSchema from '@/composables/useSchema';
 import Editor from '@/components/file/Editor.vue';
 import Collection from '@/components/Collection.vue';
 
 const route = useRoute();
-const router = useRouter();
 const { getSchemaByName } = useSchema();
 
 const props = defineProps({
@@ -51,22 +60,4 @@ const props = defineProps({
 });
 
 const schema = computed(() => getSchemaByName(props.config, props.name));
-
-const redirectName = () => {
-  // if (route.name == 'content-root') {
-  //   if (props.config?.content?.[0]?.name) {
-  //     router.push({ name: 'content', params: { name: props.config.content?.[0]?.name } });
-  //   } else {
-  //     router.push({ name: 'media' });
-  //   }
-  // }
-};
-
-onMounted(async () => {
-  redirectName();
-});
-
-watch(() => props.name, (newName, oldName) => {
-  redirectName();
-});
 </script>

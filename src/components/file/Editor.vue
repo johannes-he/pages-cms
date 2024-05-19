@@ -34,7 +34,7 @@
       <router-link v-if="schema && schema.type && (schema.type == 'collection')" :to="{ name: 'content', params: { name: name }, ...(folder != schema.path ? { query: { folder: folder } } : {}) }">
         <button class="!hidden lg:!inline-flex btn-secondary ">
           <Icon name="ArrowLeft" class="h-4 w-4 stroke-2 shrink-0"/>
-          <span>{{ schema.label }}</span>
+          <span>{{ schema.label || schema.name }}</span>
           <ul v-if="subfolders.length > 0" class="flex gap-x-2 items-center">
             <template v-if="subfolders.length > 2">
               <li class="flex gap-x-2 items-center">
@@ -159,12 +159,13 @@ import { ref, onMounted, watch, computed, inject } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Base64 } from 'js-base64';
 import { debounce } from 'lodash';
+import moment from 'moment';
 import YAML from 'yaml';
 import TOML from '@ltd/j-toml';
 import notifications from '@/services/notifications';
 import github from '@/services/github';
 import config from '@/services/config';
-import frontmatter from '@/services/frontmatter';
+import serialization from '@/services/serialization';
 import useSchema from '@/composables/useSchema';
 import CodeMirror from '@/components/file/CodeMirror.vue';
 import Datagrid from '@/components/file/Datagrid.vue';
@@ -174,11 +175,13 @@ import Field from '@/components/file/Field.vue';
 import Delete from '@/components/file/Delete.vue';
 import History from '@/components/file/History.vue';
 import Rename from '@/components/file/Rename.vue';
+
+const serializedTypes = ['yaml-frontmatter', 'json-frontmatter', 'toml-frontmatter', 'yaml', 'json', 'toml'];
 import TipTap from '@/components/file/TipTap.vue';
 
 const route = useRoute();
 const router = useRouter();
-const { createModel, sanitizeObject, getSchemaByName, generateFilename, renderDescription } = useSchema();
+const { createModel, sanitizeObject, getSchemaByName, generateFilename, renderDescription, getDateFromFilename } = useSchema();
 
 const emit = defineEmits(['file-saved']);
 
@@ -197,9 +200,17 @@ const props = defineProps({
   isNew: Boolean
 });
 
-const schema = ref(null);
-const mode = ref(props.format);
+const status = ref('loading');
+const schema = computed(() => props.name ? getSchemaByName(props.config, props.name) : null);
+const extension = computed(() => schema.value?.extension ?? /(?:\.([^.]+))?$/.exec(props.path)[1]);
+const mode = computed(() => props.format || schema.value?.format || 'raw');
 const file = ref(null);
+const sha = ref(null);
+const model = ref(null);
+const initialModel = ref(null);
+const isModelChanged = computed(() => JSON.stringify(sanitizeObject(model.value)) !== JSON.stringify(sanitizeObject(initialModel.value)));
+const currentPath = ref(null);
+const newPath = ref(null);
 const folder = computed(() => {
   if (props.isNew && route.query.folder) {
     return route.query.folder;
@@ -216,17 +227,9 @@ const subfolders = computed(() => {
   const currentPathSegments = folder.value.split('/').filter(Boolean);
   return currentPathSegments.slice(basePathSegments.length);
 });
-const extension = ref(null);
-const sha = ref(null);
-const model = ref(null);
-const initialModel = ref(null);
-const currentPath = ref(null);
-const newPath = ref(null);
 const fieldRefs = ref([]);
 const renameComponent = ref(null);
 const deleteComponent = ref(null);
-const status = ref('loading');
-const displayTitle = ref('');
 const checkValidation = ref(undefined);
 const schemaValidation = computed(() => {
   if (route.name === 'settings') {
@@ -235,11 +238,7 @@ const schemaValidation = computed(() => {
     return undefined;
   }
 });
-
-const isModelChanged = computed(() => {
-  return JSON.stringify(sanitizeObject(model.value)) !== JSON.stringify(sanitizeObject(initialModel.value));
-});
-
+const displayTitle = ref('');
 const displayDescription = computed(() => {
   let markdownDescription = '';
   if (props.description) {
@@ -281,10 +280,7 @@ const handleDeleted = () => {
 };
 
 const resetEditor = () => {
-  schema.value = null;
-  mode.value = props.format;
   file.value = null;
-  extension.value = null;
   sha.value = null;
   model.value = null;
   initialModel.value = null;
@@ -314,9 +310,6 @@ const setEditor = async () => {
   resetEditor();
   let content = '';
 
-  // Retrieve the schema
-  schema.value = (props.name) ? getSchemaByName(props.config, props.name) : null;  
-
   // Retrieve the file
   if (props.path) {
     file.value = await github.getFile(props.owner, props.repo, props.branch, props.path);
@@ -332,93 +325,51 @@ const setEditor = async () => {
       content = Base64.decode(file.value.content);
     }
   }
-
-  // Set the extension
-  if (file.value) {
-    const parts = file.value.name.split('.');
-    if (parts.length > 1 && !(parts.length === 2 && parts[0] === '')) {
-      extension.value = parts.pop().toLowerCase();
-    }
-  }
-
-  // Define the editor's mode
-  if (props.format) {
-    mode.value = props.format;
-  } else if (schema.value && schema.value.format) {
-    mode.value = schema.value.format;
-  } else {
-    mode.value = 'raw'; // Default mode
-    const codeExtensions = ['yaml', 'yml', 'javascript', 'js', 'jsx', 'typescript', 'ts', 'tsx', 'json', 'html', 'htm', 'markdown', 'md', 'mdx'];
-    
-    if (schema.value && schema.value.fields) {
-      if (extension.value && ['yaml', 'yml'].includes(extension.value)) {
-        mode.value = 'yaml';
-      } else if (extension.value === 'json') {
-        mode.value = 'json';
-      } else if (extension.value === 'toml') {
-        mode.value = 'toml';
-      } else if (schema.value.fields.some(field => field.name === 'body')) {
-        mode.value = 'yaml-frontmatter';
-      } else if (codeExtensions.includes(extension.value)) {
-        mode.value = 'code';
-      }
-    } else if (codeExtensions.includes(extension.value)) {
-      mode.value = 'code';
-    } else if (extension.value === 'csv' ) {
-      mode.value = 'datagrid';
-    }
-  }
-
-  let contentObject = {};
-  try {
-    // TODO: Move all YAML/JSON/TOML logic to one service
-    if (!content.trim()) {
-      contentObject = {};
-    } else {
-      switch (mode.value) {
-        case 'yaml-frontmatter':
-        case 'json-frontmatter':
-        case 'toml-frontmatter':
-          contentObject = frontmatter.parse(content, { format: mode.value, delimiters: schema.value.delimiters });
-          break;
-        case 'yaml':
-          contentObject = YAML.parse(content, { strict: false });
-          break;
-        case 'json':
-          contentObject = JSON.parse(content);
-          break;
-        case 'toml':
-          const tomlObject = TOML.parse(content, 1.0, '\n', false);
-          contentObject = JSON.parse(JSON.stringify(tomlObject));
-          break;
-      }
-    }
-  } catch (error) {
-    console.error('Error parsing frontmatter:', error);
-    const options = {
-      delay: 10000,
-      actions: [{
-        label: 'Review settings',
-        handler: () => router.push({ name: 'settings' }),
-        primary: true
-      }]
-    };
-    notifications.notify(`Failed to parse the file at "${props.path}", your settings may be wrong. Switching to raw editor.`, 'error', options);
-    // We can't parse the content, we switch to the raw editor.
-    mode.value = 'raw';
-  }
-
-  // For YAML and JSON files, if schema.list is true we wrap the model and fields into an extra "listWrapper" object
-  if (['yaml', 'json'].includes(mode.value) && schema.value && schema.value.fields && schema.value.list) {
-    schema.value.fields = [{ name: 'listWrapper', type: 'object', list: true, label: false, fields: schema.value.fields }];
-    contentObject = { listWrapper: contentObject };
-  }
   
-  if (['yaml-frontmatter', 'json-frontmatter', 'toml-frontmatter', 'yaml', 'json', 'toml'].includes(mode.value) && schema.value && schema.value.fields) {
+  // TODO: skip some of this parsing when the file is new
+  if (serializedTypes.includes(mode.value) && schema.value?.fields) {
+    let contentObject = {};
+    try {
+      // Parse the content into an object
+      contentObject = serialization.parse(content, { format: mode.value, delimiters: schema.value.delimiters });
+    } catch (error) {
+      console.error('Error parsing frontmatter:', error);
+      const options = {
+        delay: 10000,
+        actions: [{
+          label: 'Review settings',
+          handler: () => router.push({ name: 'settings' }),
+          primary: true
+        }]
+      };
+      notifications.notify(`Failed to parse the file at "${props.path}", your settings may be wrong.`, 'error', options);
+      // We can't parse the content, we switch to the raw editor.
+      mode.value = 'raw';
+    }
+    
+    // For YAML and JSON files, if schema.list is true we wrap the model and fields into an extra "listWrapper" object
+    if (['yaml', 'json', 'toml'].includes(mode.value) && schema.value.list) {
+      schema.value.fields = [{ name: 'listWrapper', type: 'object', list: true, label: false, fields: schema.value.fields }];
+      contentObject = { listWrapper: contentObject };
+    }
+
+    // If it's an existing file and the schema has a date, but we couldn't get a date from the content and filenames have a date, we extract it
+    
+    const dateField = schema.value.fields.find(field => field.name === 'date');
+    if (dateField && file.value?.name && !contentObject.date && (!schema.value.filename || schema.value.filename.startsWith('{year}-{month}-{day}'))) {
+      const filenameDate = getDateFromFilename(file.value.name);
+      if (filenameDate) {
+        const dateFormat = dateField.options?.format ?? 'YYYY-MM-DD';
+        contentObject.date = moment(filenameDate.string, 'YYYY-MM-DD').format(dateFormat);
+      }
+    }
+
     model.value = createModel(schema.value.fields, contentObject);
   } else {
     model.value = content;
   }
+
+  
 
   initialModel.value = JSON.parse(JSON.stringify(model.value));
   setDisplayTitle();
@@ -445,17 +396,20 @@ const save = async () => {
   }
   // We're good to go
   status.value = 'saving';
-  let content = JSON.parse(JSON.stringify(model.value));
-  // For YAML and JSON files with schema.list set to true, we've wrapped the model and fields into an extra "listWrapper" object
-  if (['yaml', 'json'].includes(mode.value) && schema.value && schema.value.fields && schema.value.list) {
-    content = model.value.listWrapper;
-  }
-  // Sanitize the object and stringify it
-  content = sanitizeObject(content);
-  if (Object.keys(content).length === 0) {
-    // If the object is empty, we just return an empty string
-    content = '';
+
+  let content = '';
+  if (serializedTypes.includes(mode.value) && schema.value?.fields) {
+    let contentObject = JSON.parse(JSON.stringify(model.value));
+    // For YAML and JSON files with schema.list set to true, we've wrapped the model and fields into an extra "listWrapper" object
+    if (['yaml', 'json', 'toml'].includes(mode.value) && schema.value.list) {
+      contentObject = contentObject.listWrapper;
+    }
+    // Sanitize the object and stringify it
+    contentObject = sanitizeObject(contentObject);
+
+    content = serialization.stringify(contentObject, { format: mode.value, delimiters: schema.value?.delimiters });
   } else {
+    content = model.value;
     switch (mode.value) {
       case 'yaml-frontmatter':
       case 'json-frontmatter':
@@ -508,7 +462,7 @@ const save = async () => {
     emit('file-saved', currentPath.value);
     if (route.name === 'settings') {
       // We've updated the configuration, we need to reload it
-      await config.set(props.owner, props.repo, props.branch);
+      await config.set(repoStore.owner, repoStore.repo, repoStore.branch);
     }
     status.value = '';
   } catch (error) {
@@ -549,4 +503,3 @@ watch(() => model.value, (newValue, oldValue) => {
 }, { deep: true });
 
 </script>
-

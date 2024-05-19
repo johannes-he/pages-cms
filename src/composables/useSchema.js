@@ -2,7 +2,7 @@
  * Helper functions for the schema defined in .pages.yml
  */
 
-import dayjs from 'dayjs';
+import moment from 'moment';
 import slugify from 'slugify';
 import { transliterate } from 'transliteration';
 import { marked } from 'marked';
@@ -50,8 +50,10 @@ export default function useSchema() {
         return createModel(field.fields, {});
       case 'boolean':
         return false;
+      case 'number':
+        return null;
       case 'date':
-        return dayjs().format('YYYY-MM-DD');
+        return moment().format('YYYY-MM-DD');
       default:
         return '';
     }
@@ -116,15 +118,15 @@ export default function useSchema() {
 
   const generateFilename = (pattern, schema, model) => {
     // Replace date placeholders
-    pattern = pattern.replace(/\{year\}/g, dayjs().format('YYYY'))
-                     .replace(/\{month\}/g, dayjs().format('MM'))
-                     .replace(/\{day\}/g, dayjs().format('DD'))
-                     .replace(/\{hour\}/g, dayjs().format('HH'))
-                     .replace(/\{minute\}/g, dayjs().format('mm'))
-                     .replace(/\{second\}/g, dayjs().format('ss'));
+    pattern = pattern.replace(/\{year\}/g, moment().format('YYYY'))
+                     .replace(/\{month\}/g, moment().format('MM'))
+                     .replace(/\{day\}/g, moment().format('DD'))
+                     .replace(/\{hour\}/g, moment().format('HH'))
+                     .replace(/\{minute\}/g, moment().format('mm'))
+                     .replace(/\{second\}/g, moment().format('ss'));
   
     // Replace `{primary}` with the actual name of the primary field
-    const primaryField = (schema.view && schema.view.primary) || (model.hasOwnProperty('title') ? 'title' : schema.fields[0]?.name); // To check if model.
+    const primaryField = (schema.view && schema.view.primary) || (model.hasOwnProperty('title') ? 'title' : schema.fields?.[0]?.name); // To check if model.
     pattern = pattern.replace(new RegExp(`\\{primary\\}`, 'g'), primaryField ? `{fields.${primaryField}}` : '');
   
     // Replace field placeholders
@@ -134,6 +136,21 @@ export default function useSchema() {
     });
   };
 
+  function getDateFromFilename(filename) {
+    const pattern = /^(\d{4})-(\d{2})-(\d{2})-/;
+    const match = filename.match(pattern);
+  
+    if (match) {
+      const [ , year, month, day ] = match;
+      const date = new Date(`${year}-${month}-${day}`);
+      if (!isNaN(date.getTime())) {
+        return { year, month, day, string: `${year}-${month}-${day}` };
+      }
+    }
+
+    return undefined;
+  }
+
   const renderDescription = (markdown) => {
     let html = marked(markdown);
     html = insane(html);
@@ -141,5 +158,5 @@ export default function useSchema() {
     return html;
   };
 
-  return { createModel, getDefaultValue, sanitizeObject, getSchemaByPath, getSchemaByName, safeAccess, generateFilename, renderDescription };
+  return { createModel, getDefaultValue, sanitizeObject, getSchemaByPath, getSchemaByName, safeAccess, generateFilename, getDateFromFilename, renderDescription };
 }

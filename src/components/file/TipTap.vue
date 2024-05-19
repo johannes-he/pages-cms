@@ -34,7 +34,7 @@
           </button>
           <button
             v-if="repoStore.config.object.media !== undefined || (props.options?.input !== undefined && props.options?.output !== undefined)"
-            @click="imageSelection = []; selected = editor.isActive('image') ? githubImg.getRelativeUrl(repoStore.owner, repoStore.repo, repoStore.branch, editor.getAttributes('image').src) : null; imageModal.openModal();"
+            @click="handleImageModal"
             class="tiptap-control group relative"
             :class="{ 'tiptap-control-active': editor.isActive('image') }"
           >
@@ -176,8 +176,8 @@
       />
     </template>
   </div>
-  <!-- Inser image modal -->
-  <Modal ref="imageModal" :customClass="'modal-file-browser'">
+  <!-- Insert image modal -->
+  <Modal ref="imageModal" :componentClass="'modal-file-browser'">
     <template #header>Insert an image</template>
     <template #content>
       <div class="relative">
@@ -223,6 +223,7 @@
 </template>
 
 <script setup>
+// TODO: add syntax highlighting, fix tables and prevent <p> in <li>
 import { inject, ref, onBeforeUnmount, onMounted, defineAsyncComponent } from 'vue';
 import { useEditor, EditorContent } from '@tiptap/vue-3';
 import { marked } from 'marked';
@@ -273,9 +274,9 @@ const prefixOutput = ref(props.options?.output ?? repoStore.config.object.media?
 const uploadPath = ref(props.options?.path ?? repoStore.config.object.media?.path ?? props.options?.input ?? repoStore.config.object.media?.input ?? '');
 const fileBrowserComponent = ref(null);
 
-const turndownService = new TurndownService({ headingStyle: 'atx' });
+const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 turndownService.addRule('styled-or-classed', {
-  filter: (node, options)  => (node.getAttribute('style') || node.getAttribute('class')),
+  filter: (node, options)  => ((node.nodeName === 'IMG' && (node.getAttribute('width') || node.getAttribute('height'))) || node.getAttribute('style') || node.getAttribute('class')),
   replacement: (content, node, options) => node.outerHTML
 });
 
@@ -291,6 +292,16 @@ const setHeadline = () => {
   }
 };
 
+const handleImageModal = () => {
+  imageSelection.value = [];
+  selected.value = editor.value.isActive('image') ? githubImg.getRelativeUrl(repoStore.owner, repoStore.repo, repoStore.branch, editor.value.getAttributes('image').src) : null;
+  if (fileBrowserComponent.value) {
+    // If the file browser is already mounted, we refresh its content
+    fileBrowserComponent.value.setContents();
+  }
+  imageModal.value.openModal();
+};
+
 const insertImage = async () => {
   if (imageSelection.value.length) {
     imageSelection.value.forEach(async (selectedImage) => {
@@ -303,7 +314,8 @@ const insertImage = async () => {
 
 const importContent = async (content) => {
   let htmlContent = (props.format == 'markdown') ? marked(content) : content;
-  htmlContent = githubImg.htmlSwapPrefix(htmlContent, prefixOutput.value, prefixInput.value);
+  htmlContent = githubImg.htmlSwapPrefix(htmlContent, prefixOutput.value, prefixInput.value, true);
+  // TODO: find a way to display spinner while the files are being loaded.
   htmlContent = await githubImg.relativeToRawUrls(repoStore.owner, repoStore.repo, repoStore.branch, htmlContent, repoStore.details.private);
 
   return htmlContent;
@@ -312,7 +324,7 @@ const importContent = async (content) => {
 const exportContent = (content) => {
   let htmlContent = githubImg.rawToRelativeUrls(repoStore.owner, repoStore.repo, repoStore.branch, content);
   htmlContent = githubImg.htmlSwapPrefix(htmlContent, prefixInput.value, prefixOutput.value);
-
+  
   return (props.format == 'markdown') ? turndownService.turndown(htmlContent) : htmlContent;
 };
 
@@ -330,7 +342,17 @@ const editor = useEditor({
     StarterKit.configure({
       dropcursor: { width: 2}
     }),
-    Image.configure({ inline: true }),
+    Image.extend({
+      addAttributes() {
+        return {
+          ...this.parent?.(),
+          class: { default: null },
+          style: { default: null },
+          width: { default: null },
+          height: { default: null }
+        };
+      }
+    }).configure({ inline: true }),
     Link.configure({
       openOnClick: false,
       HTMLAttributes: {
@@ -391,7 +413,11 @@ const upload = async (file) => {
       const data = await github.saveFile(repoStore.owner, repoStore.repo, repoStore.branch, fullPath, content, null, true);
       notifications.close(notificationId);
       if (data) {
-        notifications.notify(`File '${file.name}' successfully uploaded.`, 'success');
+        if (data.content.path === fullPath) {
+          notifications.notify(`File '${file.name}' successfully uploaded.`, 'success');
+        } else {
+          notifications.notify(`File '${file.name}' successfully uploaded but renamed to '${data.content.name}'.`, 'success');
+        }
         return data.content.path;
       } else {
         notifications.notify(`File upload failed.`, 'error');
@@ -436,5 +462,4 @@ const toggleEditor = () => {
     setContent();
   }
 };
-
 </script>

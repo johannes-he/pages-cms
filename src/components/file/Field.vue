@@ -1,5 +1,5 @@
 <template>
-  <div v-if="model && !field.hidden" class="field">
+  <div v-if="model && !field.hidden" class="field" :class="`field-type-${field.type}`">
     <div class="flex gap-x-2 items-center mb-2" v-if="field.label !== false">
       <label class="font-medium">{{ field.label || field.name }}</label>
       <div v-if="field.required" class="chip-secondary text-sm">Required</div>
@@ -61,35 +61,13 @@
 // TODO: add schema path to each field (for traceability)
 import { ref, computed } from 'vue';
 import Draggable from 'vuedraggable';
+import fieldRegistry from '@/fields/fieldRegistry';
 import useSchema from '@/composables/useSchema';
 import useFieldValidation from '@/composables/useFieldValidation';
 import Icon from '@/components/utils/Icon.vue';
-import FieldString from '@/components/fields/FieldString.vue';
-import FieldNumber from '@/components/fields/FieldNumber.vue';
-import FieldText from '@/components/fields/FieldText.vue';
-import FieldDate from '@/components/fields/FieldDate.vue';
-import FieldBoolean from '@/components/fields/FieldBoolean.vue';
-import FieldSelect from '@/components/fields/FieldSelect.vue';
-import FieldObject from '@/components/fields/FieldObject.vue';
-import FieldImage from '@/components/fields/FieldImage.vue';
-import FieldCode from '@/components/fields/FieldCode.vue';
-import FieldRichText from '@/components/fields/FieldRichText.vue';
 
-const { getDefaultValue, sanitizeObject } = useSchema();
+const { getDefaultValue } = useSchema();
 const { validateListRange } = useFieldValidation();
-
-const fieldComponents = {
-  string: { component: FieldString },
-  number: { component: FieldNumber },
-  date: { component: FieldDate },
-  text: { component: FieldText },
-  boolean: { component: FieldBoolean, },
-  select: { component: FieldSelect },
-  object: { component: FieldObject },
-  image: { component: FieldImage, listSupport: true },
-  code: { component: FieldCode },
-  'rich-text': { component: FieldRichText },
-};
 
 const props = defineProps({
   field: Object,
@@ -102,11 +80,11 @@ const fieldErrors = ref([]);
 const listErrors = ref([]);
 
 const fieldComponent = computed(() => {
-  return (fieldComponents[props.field.type] && fieldComponents[props.field.type].component) ? fieldComponents[props.field.type].component : FieldText;
+  return fieldRegistry[props.field.type]?.EditComponent || fieldRegistry['text']?.EditComponent || null;
 });
 
 const fieldListSupport = computed(() => {
-  return (fieldComponents[props.field.type] && fieldComponents[props.field.type].listSupport) ? fieldComponents[props.field.type].listSupport : false;
+  return fieldRegistry[props.field.type]?.supportsList || false;
 });
 
 const addEntry = () => {

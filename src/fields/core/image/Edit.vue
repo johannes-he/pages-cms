@@ -31,7 +31,7 @@
     </template>
   </Draggable>
   <!-- File browser modal -->
-  <Modal ref="selectImageModal" :customClass="'modal-file-browser'">
+  <Modal ref="selectImageModal" :componentClass="'modal-file-browser'">
     <template #header>Select an image</template>
     <template #content>
       <div class="relative">
@@ -130,12 +130,20 @@ const removeImage = (index) => {
 const changeImage = (index) => {
   imageSelection.value = [ internalModelValue.value[index] ];
   activeImgIndex.value = index;
+  if (fileBrowserComponent.value) {
+    // If the file browser is already mounted, we refresh its content
+    fileBrowserComponent.value.setContents();
+  }
   selectImageModal.value.openModal();
 };
 
 const addImage = () => {
   imageSelection.value = [];
   activeImgIndex.value = null;
+  if (fileBrowserComponent.value) {
+    // If the file browser is already mounted, we refresh its content
+    fileBrowserComponent.value.setContents();
+  }
   selectImageModal.value.openModal()
 };
 
@@ -146,13 +154,17 @@ const setImages = () => {
     internalModelValue.value = internalModelValue.value.filter(entry => sanitizeObject(entry));
     internalModelValue.value.forEach((imagePath, index) => {
       // For displaying images, we need the input value of the paths
-      internalModelValue.value[index] = githubImg.swapPrefix(imagePath, prefixOutput.value, prefixInput.value);
+      internalModelValue.value[index] = githubImg.swapPrefix(imagePath, prefixOutput.value, prefixInput.value, true);
     });
   }
 };
 
 onMounted(async () => {
   setImages();
+});
+
+watch(() => props.modelValue, (newValue, oldValue) => {
+  if (JSON.stringify(newValue) !== JSON.stringify(oldValue)) setImages();
 });
 
 watch(
@@ -170,4 +182,5 @@ watch(
   },
   { deep: true }
 );
+
 </script>
